@@ -3,6 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import AdminNotification from "./Notification";
 
 export default function AdminHeader() {
   const router = useRouter();
@@ -12,13 +13,16 @@ export default function AdminHeader() {
   };
 
   return (
-    <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 sticky top-0 z-10">
+    <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 sticky top-0 z-10 shrink-0">
       <h1 className="text-lg font-semibold text-gray-800">Admin Dashboard</h1>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3.5">
         <span className="text-xs font-medium bg-primary/10 text-primary px-3 py-1 rounded-full">
           Super Admin
         </span>
+
+        {/* Notification Bell with Hover & Click dropdown */}
+        <AdminNotification />
 
         {/* User Icon & Hover Dropdown */}
         <div className="relative group py-2">
