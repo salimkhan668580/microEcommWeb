@@ -1,15 +1,20 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import SubCategory from "./SubCategory/SubCategory";
 import AddCategoryModal, { CategoryFormData } from "./AddCategoryModal";
+import { categoryService } from "@/src/service/admin/category.service";
+import { toast } from "react-toastify";
 
 export interface CategoryItem {
   id: string;
+  _id?: string;
   name: string;
   slug: string;
   isActive: boolean;
   subCategoriesCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export default function Category() {
@@ -17,36 +22,9 @@ export default function Category() {
     "category"
   );
 
-  const [categories, setCategories] = useState<CategoryItem[]>([
-    {
-      id: "6aeb2f76b23c9d350b4ad3fc",
-      name: "Electronics",
-      slug: "electronics",
-      isActive: true,
-      subCategoriesCount: 3,
-    },
-    {
-      id: "6aeb2f76b23c9d350b4ad3fd",
-      name: "Fashion",
-      slug: "fashion",
-      isActive: true,
-      subCategoriesCount: 1,
-    },
-    {
-      id: "6aeb2f76b23c9d350b4ad3fe",
-      name: "Accessories",
-      slug: "accessories",
-      isActive: true,
-      subCategoriesCount: 1,
-    },
-    {
-      id: "6aeb2f76b23c9d350b4ad3ff",
-      name: "Home & Kitchen",
-      slug: "home-kitchen",
-      isActive: false,
-      subCategoriesCount: 0,
-    },
-  ]);
+  const [categories, setCategories] = useState<CategoryItem[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -54,6 +32,41 @@ export default function Category() {
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<CategoryItem | null>(null);
+
+  // Fetch Categories from API (GET /users/admin/categories)
+  const fetchCategories = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const res = await categoryService.getCategories();
+
+      if (res && Array.isArray(res.categories)) {
+        const mappedCategories: CategoryItem[] = res.categories.map((cat) => ({
+          id: cat._id,
+          _id: cat._id,
+          name: cat.name,
+          slug: cat.slug,
+          isActive: cat.isActive,
+          createdAt: cat.createdAt,
+          updatedAt: cat.updatedAt,
+          subCategoriesCount: 0,
+        }));
+        setCategories(mappedCategories);
+      }
+    } catch (err: any) {
+      console.error("Failed to fetch categories:", err);
+      const errMsg =
+        err?.response?.data?.message || err?.message || "Failed to load categories";
+      setError(errMsg);
+      toast.error(errMsg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCategories();
+  }, []);
 
   const handleOpenAddModal = () => {
     setEditingCategory(null);
@@ -70,43 +83,64 @@ export default function Category() {
     setEditingCategory(null);
   };
 
-  const handleToggleStatus = (id: string) => {
-    setCategories((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, isActive: !item.isActive } : item
-      )
-    );
-  };
+  const handleToggleStatus = async (id: string) => {
+    const item = categories.find((c) => c.id === id);
+    if (!item) return;
+    const newStatus = !item.isActive;
 
-  const handleDelete = (id: string) => {
-    if (confirm("Are you sure you want to delete this category?")) {
-      setCategories((prev) => prev.filter((item) => item.id !== id));
+    try {
+      await categoryService.updateCategory(id, { isActive: newStatus });
+      setCategories((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, isActive: newStatus } : c))
+      );
+      toast.success(`Category ${newStatus ? "activated" : "deactivated"} successfully`);
+    } catch (err: any) {
+      const errMsg =
+        err?.response?.data?.message || err?.message || "Failed to update category status";
+      toast.error(errMsg);
+      console.error("Status toggle error:", err);
     }
   };
 
-  const handleSaveCategory = (data: CategoryFormData) => {
-    if (editingCategory) {
-      setCategories((prev) =>
-        prev.map((item) =>
-          item.id === editingCategory.id
-            ? {
-                ...item,
-                name: data.name,
-                slug: data.slug,
-                isActive: data.isActive,
-              }
-            : item
-        )
-      );
-    } else {
-      const newItem: CategoryItem = {
-        id: `cat-${Date.now()}`,
-        name: data.name,
-        slug: data.slug,
-        isActive: data.isActive,
-        subCategoriesCount: 0,
-      };
-      setCategories((prev) => [newItem, ...prev]);
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this category?")) return;
+
+    try {
+      await categoryService.deleteCategory(id);
+      setCategories((prev) => prev.filter((item) => item.id !== id));
+      toast.success("Category deleted successfully");
+    } catch (err: any) {
+      const errMsg =
+        err?.response?.data?.message || err?.message || "Failed to delete category";
+      toast.error(errMsg);
+      console.error("Delete category error:", err);
+    }
+  };
+
+  const handleSaveCategory = async (data: CategoryFormData) => {
+    try {
+      if (editingCategory) {
+        await categoryService.updateCategory(editingCategory.id, {
+          name: data.name,
+          slug: data.slug,
+          isActive: data.isActive,
+        });
+        toast.success("Category updated successfully");
+      } else {
+        await categoryService.createCategory({
+          name: data.name,
+          slug: data.slug,
+          isActive: data.isActive,
+        });
+        toast.success("Category created successfully");
+      }
+      fetchCategories();
+      handleCloseModal();
+    } catch (err: any) {
+      const errMsg =
+        err?.response?.data?.message || err?.message || "Failed to save category";
+      toast.error(errMsg);
+      console.error("Save category error:", err);
     }
   };
 
@@ -142,11 +176,10 @@ export default function Category() {
           <button
             type="button"
             onClick={() => setActiveTab("category")}
-            className={`px-4 py-2 rounded-lg font-semibold transition cursor-pointer flex items-center gap-1.5 ${
-              activeTab === "category"
+            className={`px-4 py-2 rounded-lg font-semibold transition cursor-pointer flex items-center gap-1.5 ${activeTab === "category"
                 ? "bg-primary text-white shadow-xs"
                 : "text-gray-600 hover:text-gray-900"
-            }`}
+              }`}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
@@ -156,11 +189,10 @@ export default function Category() {
           <button
             type="button"
             onClick={() => setActiveTab("subCategory")}
-            className={`px-4 py-2 rounded-lg font-semibold transition cursor-pointer flex items-center gap-1.5 ${
-              activeTab === "subCategory"
+            className={`px-4 py-2 rounded-lg font-semibold transition cursor-pointer flex items-center gap-1.5 ${activeTab === "subCategory"
                 ? "bg-primary text-white shadow-xs"
                 : "text-gray-600 hover:text-gray-900"
-            }`}
+              }`}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
@@ -242,7 +274,7 @@ export default function Category() {
               </div>
             </div>
 
-            {/* Filter and Add Category CTA */}
+            {/* Filter, Refresh and Add Category CTA */}
             <div className="flex items-center gap-3">
               <select
                 value={statusFilter}
@@ -253,6 +285,28 @@ export default function Category() {
                 <option value="Active">Active Only</option>
                 <option value="Inactive">Inactive Only</option>
               </select>
+
+              <button
+                type="button"
+                onClick={fetchCategories}
+                disabled={isLoading}
+                title="Refresh Categories"
+                className="p-2 rounded-xl border border-gray-200 bg-white text-gray-600 hover:text-primary hover:bg-gray-50 transition cursor-pointer shadow-xs disabled:opacity-50"
+              >
+                <svg
+                  className={`w-4 h-4 ${isLoading ? "animate-spin text-primary" : ""}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
+                </svg>
+              </button>
 
               <button
                 type="button"
@@ -281,7 +335,51 @@ export default function Category() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 text-gray-600">
-                  {filteredCategories.length === 0 ? (
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={5} className="py-12 text-center text-gray-400">
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <svg
+                            className="animate-spin h-6 w-6 text-primary"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                          >
+                            <circle
+                              className="opacity-25"
+                              cx="12"
+                              cy="12"
+                              r="10"
+                              stroke="currentColor"
+                              strokeWidth="4"
+                            />
+                            <path
+                              className="opacity-75"
+                              fill="currentColor"
+                              d="M4 12a8 8 0 018-8v8H4z"
+                            />
+                          </svg>
+                          <span className="text-xs font-medium text-gray-500">
+                            Loading categories...
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : error && categories.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-12 text-center text-red-500">
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <p className="text-xs font-semibold">{error}</p>
+                          <button
+                            type="button"
+                            onClick={fetchCategories}
+                            className="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition cursor-pointer"
+                          >
+                            Try Again
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : filteredCategories.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="py-12 text-center text-gray-400">
                         No categories found.
@@ -304,21 +402,22 @@ export default function Category() {
                             <button
                               type="button"
                               onClick={() => handleToggleStatus(cat.id)}
-                              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                                cat.isActive ? "bg-emerald-600" : "bg-gray-300"
-                              }`}
-                              title={cat.isActive ? "Active (Click to deactivate)" : "Inactive (Click to activate)"}
+                              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${cat.isActive ? "bg-emerald-600" : "bg-gray-300"
+                                }`}
+                              title={
+                                cat.isActive
+                                  ? "Active (Click to deactivate)"
+                                  : "Inactive (Click to activate)"
+                              }
                             >
                               <span
-                                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                                  cat.isActive ? "translate-x-4" : "translate-x-0"
-                                }`}
+                                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${cat.isActive ? "translate-x-4" : "translate-x-0"
+                                  }`}
                               />
                             </button>
                             <span
-                              className={`text-[10px] font-bold ${
-                                cat.isActive ? "text-emerald-700" : "text-gray-400"
-                              }`}
+                              className={`text-[10px] font-bold ${cat.isActive ? "text-emerald-700" : "text-gray-400"
+                                }`}
                             >
                               {cat.isActive ? "Active" : "Inactive"}
                             </span>
@@ -340,7 +439,12 @@ export default function Category() {
                               title="Delete Category"
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                />
                               </svg>
                             </button>
                           </div>
@@ -370,4 +474,3 @@ export default function Category() {
     </div>
   );
 }
-

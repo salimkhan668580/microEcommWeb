@@ -1,7 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { toast } from "react-toastify";
+import { userProfileService } from "@/src/service/userProfile.service";
 
 type SettingsTab = "profile" | "security" | "notifications" | "privacy";
 
@@ -10,12 +12,62 @@ export default function Setting() {
 
   // Profile Form State
   const [profile, setProfile] = useState({
+    id: "6adf27c17e0b07ffdfe966c9",
     name: "Salim Khan",
-    email: "salim@example1.com",
-    phone: "+1 (555) 234-5678",
+    email: "salim@example.com",
+    phone: "98765432101",
+    role: "user",
     gender: "Male",
     dob: "1995-08-15",
   });
+
+  const [isLoadingProfile, setIsLoadingProfile] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+
+  // Fetch current user details via GET /users/me
+  useEffect(() => {
+    const fetchUserDetails = async () => {
+      try {
+        setIsLoadingProfile(true);
+        const res = await userProfileService.getProfile();
+        if (res?.user) {
+          setProfile((prev) => ({
+            ...prev,
+            id: res.user.id || prev.id,
+            name: res.user.name || prev.name,
+            email: res.user.email || prev.email,
+            phone: res.user.phone || prev.phone,
+            role: res.user.role || prev.role,
+          }));
+        }
+      } catch (err: any) {
+        console.warn("Could not fetch profile from server, using local storage/fallback:", err?.message);
+        // Fallback to local storage if available
+        if (typeof window !== "undefined") {
+          const storedUser = localStorage.getItem("user");
+          if (storedUser) {
+            try {
+              const parsed = JSON.parse(storedUser);
+              setProfile((prev) => ({
+                ...prev,
+                id: parsed.id || prev.id,
+                name: parsed.name || prev.name,
+                email: parsed.email || prev.email,
+                phone: parsed.phone || prev.phone,
+                role: parsed.role || prev.role,
+              }));
+            } catch (e) {
+              // ignore
+            }
+          }
+        }
+      } finally {
+        setIsLoadingProfile(false);
+      }
+    };
+
+    fetchUserDetails();
+  }, []);
 
   // Password Form State
   const [passwordData, setPasswordData] = useState({
@@ -43,9 +95,38 @@ export default function Setting() {
     setTimeout(() => setSuccessMessage(null), 3000);
   };
 
-  const handleProfileSubmit = (e: React.FormEvent) => {
+  const handleProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    showSuccess("Profile details updated successfully!");
+    setIsSavingProfile(true);
+    try {
+      // PATCH /users/me
+      const res = await userProfileService.updateProfile({
+        name: profile.name.trim(),
+        email: profile.email.trim(),
+        phone: profile.phone.trim(),
+      });
+
+      if (res?.user) {
+        setProfile((prev) => ({
+          ...prev,
+          name: res.user.name || prev.name,
+          email: res.user.email || prev.email,
+          phone: res.user.phone || prev.phone,
+        }));
+      }
+
+      toast.success("Profile updated successfully!");
+      showSuccess("Profile details updated successfully!");
+    } catch (err: any) {
+      const errorMsg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Failed to update profile.";
+      toast.error(errorMsg);
+    } finally {
+      setIsSavingProfile(false);
+    }
   };
 
   const handlePasswordSubmit = (e: React.FormEvent) => {
@@ -179,7 +260,14 @@ export default function Setting() {
                   {/* Avatar section */}
                   <div className="flex items-center gap-5">
                     <div className="w-16 h-16 rounded-full bg-primary text-white font-bold text-xl flex items-center justify-center shadow-md">
-                      SK
+                      {profile.name
+                        ? profile.name
+                            .split(" ")
+                            .map((n) => n[0])
+                            .join("")
+                            .toUpperCase()
+                            .slice(0, 2)
+                        : "U"}
                     </div>
                     <div>
                       <h4 className="text-xs font-bold text-gray-800">Profile Photo</h4>
@@ -255,9 +343,37 @@ export default function Setting() {
                   <div className="pt-4 border-t border-gray-100 flex justify-end">
                     <button
                       type="submit"
-                      className="px-6 py-2.5 rounded-xl bg-primary text-white text-xs font-semibold shadow-md hover:opacity-90 transition cursor-pointer"
+                      disabled={isSavingProfile}
+                      className={`px-6 py-2.5 rounded-xl bg-primary text-white text-xs font-semibold shadow-md hover:opacity-90 transition cursor-pointer flex items-center gap-2 ${
+                        isSavingProfile ? "opacity-75 cursor-not-allowed" : ""
+                      }`}
                     >
-                      Save Changes
+                      {isSavingProfile ? (
+                        <>
+                          <svg
+                            className="animate-spin h-3.5 w-3.5 text-white"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                          >
+                            <circle
+                              className="opacity-25"
+                              cx="12"
+                              cy="12"
+                              r="10"
+                              stroke="currentColor"
+                              strokeWidth="4"
+                            />
+                            <path
+                              className="opacity-75"
+                              fill="currentColor"
+                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                            />
+                          </svg>
+                          <span>Saving...</span>
+                        </>
+                      ) : (
+                        "Save Changes"
+                      )}
                     </button>
                   </div>
                 </form>
