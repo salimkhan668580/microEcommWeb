@@ -6,7 +6,8 @@ import axios, {
 } from "axios";
 
 // Retrieve API Base URL from environment variables
-export const API_BASE_URL: string =process.env.NEXT_PUBLIC_API_BASE_URL || "http://186.240.156.202:8000/api"
+export const API_BASE_URL: string =
+    process.env.NEXT_PUBLIC_API_BASE_URL || "/api";
 
 /**
  * Pre-configured Axios instance
