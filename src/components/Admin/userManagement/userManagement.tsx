@@ -401,7 +401,7 @@ export default function UserManagement() {
                     <p className="text-rose-500 mb-3">{error}</p>
                     <button
                       type="button"
-                      onClick={fetchUsers}
+                      onClick={() => fetchUsers()}
                       className="px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-semibold cursor-pointer"
                     >
                       Retry
